@@ -1,29 +1,26 @@
-"""Vacancies API endpoints"""
-from typing import List, Optional, Dict, Any
+"""
+Vacancies API endpoints
+Эндпоинты для работы с вакансиями
+"""
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas import (
+    VacancyResponse,
     VacancyCreate,
     VacancyUpdate,
-    Vacancy,
-    SearchFilterCreate,
-    SearchFilterUpdate,
-    SearchFilter,
-    AnalyticallyCreate,
-    AnalyticallyUpdate,
-    Analytically,
-    ParsingRange
 )
-from app.services.db_service import VacancyService, SearchFilterService, AnalyticallyService
+from app.services.db_service import VacancyService
 
 router = APIRouter()
 
+# ============================================================================
+# VACANCY ENDPOINTS
+# ============================================================================
 
-# ============ Vacancy Endpoints ============
-
-@router.get("/", response_model=List[Vacancy])
+@router.get("/", response_model=List[VacancyResponse])
 async def get_vacancies(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
@@ -31,7 +28,7 @@ async def get_vacancies(
     company_id: Optional[int] = Query(None, description="Filter by company ID"),
     status: Optional[str] = Query(None, description="Filter by vacancy status"),
     db: Session = Depends(get_db)
-) -> List[Vacancy]:
+) -> List[VacancyResponse]:
     """
     Get list of vacancies with optional filters
     
@@ -43,14 +40,20 @@ async def get_vacancies(
     - status: Filter by vacancy status
     """
     vacancy_service = VacancyService()
-    return vacancy_service.get_all(db, skip=skip, limit=limit)
+    return vacancy_service.get_all(
+        db, 
+        skip=skip, 
+        limit=limit,
+        status=status,
+        company_id=company_id
+    )
 
 
-@router.get("/{vacancy_id}", response_model=Vacancy)
+@router.get("/{vacancy_id}", response_model=VacancyResponse)
 async def get_vacancy(
     vacancy_id: int,
     db: Session = Depends(get_db)
-) -> Vacancy:
+) -> VacancyResponse:
     """
     Get specific vacancy by ID
     
@@ -59,19 +62,21 @@ async def get_vacancy(
     """
     vacancy_service = VacancyService()
     vacancy = vacancy_service.get(db, vacancy_id)
+    
     if not vacancy:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Vacancy with id {vacancy_id} not found"
         )
+    
     return vacancy
 
 
-@router.get("/hh/{hh_id}", response_model=Vacancy)
+@router.get("/hh/{hh_id}", response_model=VacancyResponse)
 async def get_vacancy_by_hh_id(
     hh_id: str,
     db: Session = Depends(get_db)
-) -> Vacancy:
+) -> VacancyResponse:
     """
     Get specific vacancy by HH.ru ID
     
@@ -80,19 +85,21 @@ async def get_vacancy_by_hh_id(
     """
     vacancy_service = VacancyService()
     vacancy = vacancy_service.get_by_hh_id(db, hh_id)
+    
     if not vacancy:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Vacancy with HH.ru ID {hh_id} not found"
         )
+    
     return vacancy
 
 
-@router.post("/", response_model=Vacancy, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=VacancyResponse, status_code=status.HTTP_201_CREATED)
 async def create_vacancy(
     vacancy: VacancyCreate,
     db: Session = Depends(get_db)
-) -> Vacancy:
+) -> VacancyResponse:
     """
     Create a new vacancy
     
@@ -100,15 +107,30 @@ async def create_vacancy(
     - vacancy: Vacancy data
     """
     vacancy_service = VacancyService()
-    return vacancy_service.create(db, vacancy)
+    
+    # Проверяем, не существует ли уже вакансия с таким hh_id
+    existing = vacancy_service.get_by_hh_id(db, vacancy.hh_id)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Vacancy with HH.ru ID {vacancy.hh_id} already exists"
+        )
+    
+    try:
+        return vacancy_service.create(db, vacancy)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create vacancy: {str(e)}"
+        )
 
 
-@router.put("/{vacancy_id}", response_model=Vacancy)
+@router.put("/{vacancy_id}", response_model=VacancyResponse)
 async def update_vacancy(
     vacancy_id: int,
     vacancy_update: VacancyUpdate,
     db: Session = Depends(get_db)
-) -> Vacancy:
+) -> VacancyResponse:
     """
     Update an existing vacancy
     
@@ -118,11 +140,13 @@ async def update_vacancy(
     """
     vacancy_service = VacancyService()
     vacancy = vacancy_service.update(db, vacancy_id, vacancy_update)
+    
     if not vacancy:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Vacancy with id {vacancy_id} not found"
         )
+    
     return vacancy
 
 
@@ -139,173 +163,32 @@ async def delete_vacancy(
     """
     vacancy_service = VacancyService()
     success = vacancy_service.delete(db, vacancy_id)
+    
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Vacancy with id {vacancy_id} not found"
         )
+    
     return None
 
 
-# ============ Search Filter Endpoints ============
+# ============================================================================
+# STATISTICS ENDPOINT
+# ============================================================================
 
-@router.get("/filters/", response_model=List[SearchFilter])
-async def get_search_filters(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    db: Session = Depends(get_db)
-) -> List[SearchFilter]:
+@router.get("/stats/summary")
+async def get_vacancies_summary(db: Session = Depends(get_db)):
     """
-    Get list of search filters
+    Get summary statistics about vacancies
     """
-    filter_service = SearchFilterService()
-    return filter_service.get_all(db, skip=skip, limit=limit)
-
-
-@router.get("/filters/{filter_id}", response_model=SearchFilter)
-async def get_search_filter(
-    filter_id: int,
-    db: Session = Depends(get_db)
-) -> SearchFilter:
-    """
-    Get specific search filter by ID
-    """
-    filter_service = SearchFilterService()
-    search_filter = filter_service.get(db, filter_id)
-    if not search_filter:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Search filter with id {filter_id} not found"
-        )
-    return search_filter
-
-
-@router.post("/filters/", response_model=SearchFilter, status_code=status.HTTP_201_CREATED)
-async def create_search_filter(
-    search_filter: SearchFilterCreate,
-    db: Session = Depends(get_db)
-) -> SearchFilter:
-    """
-    Create a new search filter
-    """
-    filter_service = SearchFilterService()
-    return filter_service.create(db, search_filter)
-
-
-@router.put("/filters/{filter_id}", response_model=SearchFilter)
-async def update_search_filter(
-    filter_id: int,
-    filter_update: SearchFilterUpdate,
-    db: Session = Depends(get_db)
-) -> SearchFilter:
-    """
-    Update an existing search filter
-    """
-    filter_service = SearchFilterService()
-    search_filter = filter_service.update(db, filter_id, filter_update)
-    if not search_filter:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Search filter with id {filter_id} not found"
-        )
-    return search_filter
-
-
-@router.delete("/filters/{filter_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_search_filter(
-    filter_id: int,
-    db: Session = Depends(get_db)
-):
-    """
-    Delete a search filter
-    """
-    filter_service = SearchFilterService()
-    success = filter_service.delete(db, filter_id)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Search filter with id {filter_id} not found"
-        )
-    return None
-
-
-# ============ Analytically Endpoints ============
-
-@router.get("/analytics/", response_model=List[Analytically])
-async def get_analytics(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    db: Session = Depends(get_db)
-) -> List[Analytically]:
-    """
-    Get list of analytics records
-    """
-    analytics_service = AnalyticallyService()
-    return analytics_service.get_all(db, skip=skip, limit=limit)
-
-
-@router.get("/analytics/{analytics_id}", response_model=Analytically)
-async def get_analytics_record(
-    analytics_id: int,
-    db: Session = Depends(get_db)
-) -> Analytically:
-    """
-    Get specific analytics record by ID
-    """
-    analytics_service = AnalyticallyService()
-    analytics = analytics_service.get(db, analytics_id)
-    if not analytics:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Analytics record with id {analytics_id} not found"
-        )
-    return analytics
-
-
-@router.post("/analytics/", response_model=Analytically, status_code=status.HTTP_201_CREATED)
-async def create_analytics(
-    analytics: AnalyticallyCreate,
-    db: Session = Depends(get_db)
-) -> Analytically:
-    """
-    Create a new analytics record
-    """
-    analytics_service = AnalyticallyService()
-    return analytics_service.create(db, analytics)
-
-
-@router.put("/analytics/{analytics_id}", response_model=Analytically)
-async def update_analytics(
-    analytics_id: int,
-    analytics_update: AnalyticallyUpdate,
-    db: Session = Depends(get_db)
-) -> Analytically:
-    """
-    Update an existing analytics record
-    """
-    analytics_service = AnalyticallyService()
-    analytics = analytics_service.update(db, analytics_id, analytics_update)
-    if not analytics:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Analytics record with id {analytics_id} not found"
-        )
-    return analytics
-
-
-@router.delete("/analytics/{analytics_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_analytics(
-    analytics_id: int,
-    db: Session = Depends(get_db)
-):
-    """
-    Delete an analytics record
-    """
-    analytics_service = AnalyticallyService()
-    success = analytics_service.delete(db, analytics_id)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Analytics record with id {analytics_id} not found"
-        )
-    return None
+    vacancy_service = VacancyService()
+    
+    total = vacancy_service.count(db)
+    active = vacancy_service.count(db, status="active")
+    
+    return {
+        "total_vacancies": total,
+        "active_vacancies": active,
+        "archived_vacancies": total - active
+    }

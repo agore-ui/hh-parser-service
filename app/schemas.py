@@ -237,3 +237,22 @@ class ErrorResponse(BaseModel):
     detail: str
     error_code: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.now)
+
+
+# Aliases для обратной совместимости
+Vacancy = VacancyResponse
+Company = CompanyResponse
+SearchFilter = SearchFilterResponse
+Analytically = AnalyticsDailyResponse
+AnalyticallyCreate = AnalyticsDailyResponse
+AnalyticallyUpdate = AnalyticsDailyResponse
+ParsingRange = ParsingTaskCreate
+
+# Aliases для обратной совместимости
+Vacancy = VacancyResponse
+Company = CompanyResponse
+SearchFilter = SearchFilterResponse
+Analytically = AnalyticsDailyResponse
+AnalyticallyCreate = AnalyticsDailyResponse
+AnalyticallyUpdate = AnalyticsDailyResponse
+ParsingRange = ParsingTaskCreate

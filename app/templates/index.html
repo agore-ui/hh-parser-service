@@ -1,101 +1,165 @@
-{% extends "base.html" %}
-
-{% block title %}Dashboard - HH Parser Service{% endblock %}
-
-{% block content %}
-<div class="row">
-    <div class="col-12">
-        <h1 class="mb-4">Dashboard</h1>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-3">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Total Vacancies</h5>
-                <p class="card-text display-4" id="totalVacancies">-</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Active Filters</h5>
-                <p class="card-text display-4" id="activeFilters">-</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Parsing Tasks</h5>
-                <p class="card-text display-4" id="parsingTasks">-</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Last Updated</h5>
-                <p class="card-text" id="lastUpdated">-</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row mt-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Recent Vacancies</h5>
-                <div id="recentVacancies">
-                    <p>Loading...</p>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Quick Actions</h5>
-                <div class="d-grid gap-2">
-                    <a href="/ui/vacancies" class="btn btn-primary">View All Vacancies</a>
-                    <a href="/ui/filters" class="btn btn-secondary">Manage Filters</a>
-                    <a href="/docs" target="_blank" class="btn btn-outline-primary">API Documentation</a>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-    async function loadDashboard() {
-        try {
-            const vacanciesResp = await fetch('/api/v1/vacancies?limit=1000');
-            const vacanciesData = await vacanciesResp.json();
-            document.getElementById('totalVacancies').textContent = vacanciesData.total || 0;
-            
-            const filtersResp = await fetch('/api/v1/vacancies/filters');
-            const filtersData = await filtersResp.json();
-            document.getElementById('activeFilters').textContent = filtersData.length || 0;
-            
-            document.getElementById('lastUpdated').textContent = new Date().toLocaleString('ru-RU');
-            
-            if (vacanciesData.items && vacanciesData.items.length > 0) {
-                const recentHTML = vacanciesData.items.slice(0, 5).map(v => 
-                    `<div class="border-bottom py-2">
-                        <a href="${v.url}" target="_blank" class="text-decoration-none">${v.title}</a>
-                        <br><small class="text-muted">${v.employer_name || 'No company'}</small>
-                    </div>`
-                ).join('');
-                document.getElementById('recentVacancies').innerHTML = recentHTML;
-            }
-        } catch (error) {
-            console.error('Error loading dashboard:', error);
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HH Parser - Тест API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
         }
-    }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 { color: #333; }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #45a049; }
+        .vacancy {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .vacancy h3 { margin: 0 0 10px 0; color: #2196F3; }
+        .error { color: red; padding: 10px; background: #fee; border-radius: 4px; }
+        .success { color: green; padding: 10px; background: #efe; border-radius: 4px; }
+        .loading { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>🎯 HH Parser Service - Тест API</h1>
     
-    loadDashboard();
-</script>
-{% endblock %}
+    <div class="container">
+        <h2>Проверка подключения</h2>
+        <button onclick="testConnection()">Проверить подключение</button>
+        <button onclick="loadVacancies()">Загрузить вакансии</button>
+        <button onclick="loadCompanies()">Загрузить компании</button>
+        <div id="status"></div>
+    </div>
+    
+    <div class="container">
+        <h2>Результаты</h2>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        // API URL - ВАЖНО! Это должен быть адрес вашего сервера
+        const API_URL = 'http://45.159.209.10:8001/api/v1';
+        
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="${type}">${message}</div>`;
+        }
+        
+        function showResults(html) {
+            document.getElementById('results').innerHTML = html;
+        }
+        
+        async function testConnection() {
+            showStatus('Проверка подключения...', 'loading');
+            try {
+                const response = await fetch(`${API_URL}/../health`);
+                const data = await response.json();
+                showStatus('✓ Подключение успешно! ' + JSON.stringify(data), 'success');
+            } catch (error) {
+                showStatus('✗ Ошибка подключения: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadVacancies() {
+            showStatus('Загрузка вакансий...', 'loading');
+            showResults('');
+            
+            try {
+                const response = await fetch(`${API_URL}/vacancies?limit=10`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const vacancies = await response.json();
+                
+                if (vacancies.length === 0) {
+                    showStatus('Вакансий не найдено', 'error');
+                    showResults('<p>База данных пуста. Запустите парсинг!</p>');
+                    return;
+                }
+                
+                showStatus(`✓ Загружено вакансий: ${vacancies.length}`, 'success');
+                
+                let html = '';
+                vacancies.forEach(v => {
+                    const salary = v.salary_from || v.salary_to 
+                        ? `${v.salary_from || '?'} - ${v.salary_to || '?'} ${v.salary_currency || ''}`
+                        : 'Не указана';
+                    
+                    html += `
+                        <div class="vacancy">
+                            <h3>${v.title}</h3>
+                            <p><strong>ID:</strong> ${v.id} | <strong>HH ID:</strong> ${v.hh_id}</p>
+                            <p><strong>Зарплата:</strong> ${salary}</p>
+                            <p><strong>Статус:</strong> ${v.status}</p>
+                            <p><strong>Регион:</strong> ${v.region || 'N/A'}</p>
+                        </div>
+                    `;
+                });
+                
+                showResults(html);
+                
+            } catch (error) {
+                showStatus('✗ Ошибка: ' + error.message, 'error');
+                console.error('Полная ошибка:', error);
+            }
+        }
+        
+        async function loadCompanies() {
+            showStatus('Загрузка компаний...', 'loading');
+            showResults('');
+            
+            try {
+                const response = await fetch(`${API_URL}/companies?limit=10`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const companies = await response.json();
+                
+                showStatus(`✓ Загружено компаний: ${companies.length}`, 'success');
+                
+                let html = '<ul>';
+                companies.forEach(c => {
+                    html += `<li><strong>${c.name}</strong> (HH ID: ${c.hh_id})</li>`;
+                });
+                html += '</ul>';
+                
+                showResults(html);
+                
+            } catch (error) {
+                showStatus('✗ Ошибка: ' + error.message, 'error');
+            }
+        }
+        
+        // Автоматическая проверка при загрузке
+        window.onload = () => {
+            testConnection();
+        };
+    </script>
+</body>
+</html>
