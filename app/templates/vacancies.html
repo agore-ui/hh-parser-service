@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Vacancies - HH Parser Service{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">Vacancies</h1>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <input type="text" class="form-control" id="searchQuery" placeholder="Search by title...">
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="filterExperience">
+            <option value="">All Experience Levels</option>
+            <option value="noExperience">No Experience</option>
+            <option value="between1And3">1-3 years</option>
+            <option value="between3And6">3-6 years</option>
+            <option value="moreThan6">6+ years</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="filterEmployment">
+            <option value="">All Employment Types</option>
+            <option value="full">Full time</option>
+            <option value="part">Part time</option>
+            <option value="project">Project</option>
+        </select>
+    </div>
+    <div class="col-md-2">
+        <button class="btn btn-primary w-100" onclick="loadVacancies()">Search</button>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div id="vacanciesContainer">
+            <p>Loading vacancies...</p>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-12">
+        <nav>
+            <ul class="pagination" id="pagination"></ul>
+        </nav>
+    </div>
+</div>
+
+<script>
+let currentPage = 1;
+const pageSize = 20;
+
+async function loadVacancies(page = 1) {
+    try {
+        const query = document.getElementById('searchQuery').value;
+        const experience = document.getElementById('filterExperience').value;
+        const employment = document.getElementById('filterEmployment').value;
+        
+        let url = `/api/v1/vacancies?page=${page}&limit=${pageSize}`;
+        if (query) url += `&query=${encodeURIComponent(query)}`;
+        if (experience) url += `&experience=${experience}`;
+        if (employment) url += `&employment=${employment}`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        const container = document.getElementById('vacanciesContainer');
+        
+        if (data.items && data.items.length > 0) {
+            const html = data.items.map(v => `
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <a href="${v.url}" target="_blank" class="text-decoration-none">${v.title}</a>
+                        </h5>
+                        <p class="card-text">
+                            <strong>${v.employer_name || 'Unknown company'}</strong><br>
+                            ${v.salary_from || v.salary_to ? `Salary: ${v.salary_from || ''} ${v.salary_to ? '- ' + v.salary_to : ''} ${v.salary_currency || ''}` : 'Salary not specified'}<br>
+                            Experience: ${v.experience || 'Not specified'}<br>
+                            ${v.area_name ? 'Location: ' + v.area_name : ''}
+                        </p>
+                        <small class="text-muted">Posted: ${new Date(v.published_at).toLocaleDateString('ru-RU')}</small>
+                    </div>
+                </div>
+            `).join('');
+            container.innerHTML = html;
+            
+            renderPagination(data.total, page);
+        } else {
+            container.innerHTML = '<p>No vacancies found.</p>';
+        }
+    } catch (error) {
+        console.error('Error loading vacancies:', error);
+        document.getElementById('vacanciesContainer').innerHTML = '<p class="text-danger">Error loading vacancies.</p>';
+    }
+}
+
+function renderPagination(total, current) {
+    const totalPages = Math.ceil(total / pageSize);
+    const pagination = document.getElementById('pagination');
+    
+    let html = '';
+    
+    if (current > 1) {
+        html += `<li class="page-item"><a class="page-link" href="#" onclick="loadVacancies(${current - 1}); return false;">Previous</a></li>`;
+    }
+    
+    for (let i = Math.max(1, current - 2); i <= Math.min(totalPages, current + 2); i++) {
+        html += `<li class="page-item ${i === current ? 'active' : ''}"><a class="page-link" href="#" onclick="loadVacancies(${i}); return false;">${i}</a></li>`;
+    }
+    
+    if (current < totalPages) {
+        html += `<li class="page-item"><a class="page-link" href="#" onclick="loadVacancies(${current + 1}); return false;">Next</a></li>`;
+    }
+    
+    pagination.innerHTML = html;
+}
+
+loadVacancies();
+</script>
+{% endblock %}
