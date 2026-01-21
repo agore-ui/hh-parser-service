@@ -10,7 +10,8 @@ from app.database import Base
 from app.models import *  # noqa
 
 # Import config
-from config import DATABASE_URL
+from config import settings
+DATABASE_URL = settings.DATABASE_URL
 
 # this is the Alembic Config object
 config = context.config
