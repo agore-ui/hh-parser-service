@@ -2,7 +2,7 @@
 Vacancies API endpoints
 Эндпоинты для работы с вакансиями
 """
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -20,33 +20,59 @@ router = APIRouter()
 # VACANCY ENDPOINTS
 # ============================================================================
 
-@router.get("/", response_model=List[VacancyResponse])
+@router.get("/", response_model=Dict[str, Any])
 async def get_vacancies(
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
+    page: int = Query(1, ge=1, description="Page number (starts from 1)"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
     hh_id: Optional[str] = Query(None, description="Filter by HH.ru vacancy ID"),
     company_id: Optional[int] = Query(None, description="Filter by company ID"),
     status: Optional[str] = Query(None, description="Filter by vacancy status"),
     db: Session = Depends(get_db)
-) -> List[VacancyResponse]:
+) -> Dict[str, Any]:
     """
-    Get list of vacancies with optional filters
+    Get list of vacancies with pagination
     
     Parameters:
-    - skip: Number of records to skip (for pagination)
-    - limit: Maximum number of records to return
+    - page: Page number (starts from 1)
+    - limit: Items per page (max 100)
     - hh_id: Filter by HH.ru vacancy ID
     - company_id: Filter by company ID
     - status: Filter by vacancy status
+    
+    Returns:
+    - items: List of vacancies
+    - total: Total count of vacancies
+    - page: Current page
+    - limit: Items per page
+    - pages: Total number of pages
     """
     vacancy_service = VacancyService()
-    return vacancy_service.get_all(
+    
+    # Calculate skip
+    skip = (page - 1) * limit
+    
+    # Get vacancies
+    vacancies = vacancy_service.get_all(
         db, 
         skip=skip, 
         limit=limit,
         status=status,
         company_id=company_id
     )
+    
+    # Get total count
+    total = vacancy_service.count(db, status=status, company_id=company_id)
+    
+    # Calculate total pages
+    total_pages = (total + limit - 1) // limit
+    
+    return {
+        "items": vacancies,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": total_pages
+    }
 
 
 @router.get("/{vacancy_id}", response_model=VacancyResponse)
