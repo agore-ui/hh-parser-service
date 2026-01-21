@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - HH Parser Service{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">Dashboard</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Total Vacancies</h5>
+                <p class="card-text display-4" id="totalVacancies">-</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Active Filters</h5>
+                <p class="card-text display-4" id="activeFilters">-</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Parsing Tasks</h5>
+                <p class="card-text display-4" id="parsingTasks">-</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Last Updated</h5>
+                <p class="card-text" id="lastUpdated">-</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Recent Vacancies</h5>
+                <div id="recentVacancies">
+                    <p>Loading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Quick Actions</h5>
+                <div class="d-grid gap-2">
+                    <a href="/ui/vacancies" class="btn btn-primary">View All Vacancies</a>
+                    <a href="/ui/filters" class="btn btn-secondary">Manage Filters</a>
+                    <a href="/docs" target="_blank" class="btn btn-outline-primary">API Documentation</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function loadDashboard() {
+        try {
+            const vacanciesResp = await fetch('/api/v1/vacancies?limit=1000');
+            const vacanciesData = await vacanciesResp.json();
+            document.getElementById('totalVacancies').textContent = vacanciesData.total || 0;
+            
+            const filtersResp = await fetch('/api/v1/vacancies/filters');
+            const filtersData = await filtersResp.json();
+            document.getElementById('activeFilters').textContent = filtersData.length || 0;
+            
+            document.getElementById('lastUpdated').textContent = new Date().toLocaleString('ru-RU');
+            
+            if (vacanciesData.items && vacanciesData.items.length > 0) {
+                const recentHTML = vacanciesData.items.slice(0, 5).map(v => 
+                    `<div class="border-bottom py-2">
+                        <a href="${v.url}" target="_blank" class="text-decoration-none">${v.title}</a>
+                        <br><small class="text-muted">${v.employer_name || 'No company'}</small>
+                    </div>`
+                ).join('');
+                document.getElementById('recentVacancies').innerHTML = recentHTML;
+            }
+        } catch (error) {
+            console.error('Error loading dashboard:', error);
+        }
+    }
+    
+    loadDashboard();
+</script>
+{% endblock %}
